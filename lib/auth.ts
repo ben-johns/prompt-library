@@ -64,10 +64,6 @@ const authOptions: AuthOptions = {
       return token;
     },
   },
-  pages: {
-    signIn: "/auth/signin",
-    error: "/auth/error",
-  },
 }
 
 export default NextAuth(authOptions)
