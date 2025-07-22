@@ -4,11 +4,29 @@ import path from 'path';
 // Database path
 const dbPath = path.join(process.cwd(), 'prompts.db');
 
-// Initialize database
-const db = new Database(dbPath);
+// Initialize database lazily
+let db: Database.Database | null = null;
+let isInitialized = false;
 
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
+const getDatabase = () => {
+  if (!db) {
+    try {
+      db = new Database(dbPath);
+      // Enable foreign keys
+      db.pragma('foreign_keys = ON');
+      
+      if (!isInitialized) {
+        initializeDatabase();
+        isInitialized = true;
+      }
+    } catch (error) {
+      console.error('Failed to initialize database:', error);
+      // Return null if database can't be initialized (e.g., during build)
+      return null;
+    }
+  }
+  return db;
+};
 
 // Type definitions
 export interface User {
@@ -42,8 +60,11 @@ export interface SavedPrompt {
 
 // Create tables
 const initializeDatabase = () => {
+  const database = getDatabase();
+  if (!database) return;
+
   // Users table
-  db.exec(`
+  database.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
@@ -55,7 +76,7 @@ const initializeDatabase = () => {
   `);
 
   // Prompts table
-  db.exec(`
+  database.exec(`
     CREATE TABLE IF NOT EXISTS prompts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -72,7 +93,7 @@ const initializeDatabase = () => {
   `);
 
   // Saved prompts table (many-to-many relationship between users and prompts)
-  db.exec(`
+  database.exec(`
     CREATE TABLE IF NOT EXISTS saved_prompts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT NOT NULL,
@@ -85,7 +106,7 @@ const initializeDatabase = () => {
   `);
 
   // Create indexes for better performance
-  db.exec(`
+  database.exec(`
     CREATE INDEX IF NOT EXISTS idx_prompts_department ON prompts (department);
     CREATE INDEX IF NOT EXISTS idx_prompts_status ON prompts (status);
     CREATE INDEX IF NOT EXISTS idx_prompts_creator ON prompts (creator_id);
@@ -93,163 +114,202 @@ const initializeDatabase = () => {
   `);
 };
 
-// Initialize database on import
-initializeDatabase();
+// Helper function to handle database operations safely
+const safeDbOperation = <T>(operation: (db: Database.Database) => T, fallback: T): T => {
+  try {
+    const database = getDatabase();
+    if (!database) return fallback;
+    return operation(database);
+  } catch (error) {
+    console.error('Database operation failed:', error);
+    return fallback;
+  }
+};
 
 // User operations
 export const userOperations = {
   create: (user: Omit<User, 'created_at' | 'updated_at'>) => {
-    const stmt = db.prepare(`
-      INSERT INTO users (id, email, name, image)
-      VALUES (?, ?, ?, ?)
-    `);
-    return stmt.run(user.id, user.email, user.name, user.image);
+    return safeDbOperation((database) => {
+      const stmt = database.prepare(`
+        INSERT INTO users (id, email, name, image)
+        VALUES (?, ?, ?, ?)
+      `);
+      return stmt.run(user.id, user.email, user.name, user.image);
+    }, null);
   },
 
   findByEmail: (email: string): User | undefined => {
-    const stmt = db.prepare('SELECT * FROM users WHERE email = ?');
-    return stmt.get(email) as User | undefined;
+    return safeDbOperation((database) => {
+      const stmt = database.prepare('SELECT * FROM users WHERE email = ?');
+      return stmt.get(email) as User | undefined;
+    }, undefined);
   },
 
   findById: (id: string): User | undefined => {
-    const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
-    return stmt.get(id) as User | undefined;
+    return safeDbOperation((database) => {
+      const stmt = database.prepare('SELECT * FROM users WHERE id = ?');
+      return stmt.get(id) as User | undefined;
+    }, undefined);
   },
 
   upsert: (user: Omit<User, 'created_at' | 'updated_at'>) => {
-    const stmt = db.prepare(`
-      INSERT INTO users (id, email, name, image)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(email) DO UPDATE SET
-        name = excluded.name,
-        image = excluded.image,
-        updated_at = CURRENT_TIMESTAMP
-    `);
-    return stmt.run(user.id, user.email, user.name, user.image);
+    return safeDbOperation((database) => {
+      const stmt = database.prepare(`
+        INSERT INTO users (id, email, name, image)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(email) DO UPDATE SET
+          name = excluded.name,
+          image = excluded.image,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+      return stmt.run(user.id, user.email, user.name, user.image);
+    }, null);
   }
 };
 
 // Prompt operations
 export const promptOperations = {
   create: (prompt: Omit<Prompt, 'id' | 'created_at' | 'updated_at'>) => {
-    const stmt = db.prepare(`
-      INSERT INTO prompts (title, description, department, category, prompt, creator_id, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    return stmt.run(
-      prompt.title,
-      prompt.description,
-      prompt.department,
-      prompt.category,
-      prompt.prompt,
-      prompt.creator_id,
-      prompt.status
-    );
+    return safeDbOperation((database) => {
+      const stmt = database.prepare(`
+        INSERT INTO prompts (title, description, department, category, prompt, creator_id, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      return stmt.run(
+        prompt.title,
+        prompt.description,
+        prompt.department,
+        prompt.category,
+        prompt.prompt,
+        prompt.creator_id,
+        prompt.status
+      );
+    }, null);
   },
 
   findAll: (filters?: { department?: string; category?: string; status?: string }): Prompt[] => {
-    let query = 'SELECT * FROM prompts WHERE 1=1';
-    const params: any[] = [];
+    return safeDbOperation((database) => {
+      let query = 'SELECT * FROM prompts WHERE 1=1';
+      const params: any[] = [];
 
-    if (filters?.department) {
-      query += ' AND department = ?';
-      params.push(filters.department);
-    }
+      if (filters?.department) {
+        query += ' AND department = ?';
+        params.push(filters.department);
+      }
 
-    if (filters?.category) {
-      query += ' AND category = ?';
-      params.push(filters.category);
-    }
+      if (filters?.category) {
+        query += ' AND category = ?';
+        params.push(filters.category);
+      }
 
-    if (filters?.status) {
-      query += ' AND status = ?';
-      params.push(filters.status);
-    }
+      if (filters?.status) {
+        query += ' AND status = ?';
+        params.push(filters.status);
+      }
 
-    query += ' ORDER BY created_at DESC';
+      query += ' ORDER BY created_at DESC';
 
-    const stmt = db.prepare(query);
-    return stmt.all(...params) as Prompt[];
+      const stmt = database.prepare(query);
+      return stmt.all(...params) as Prompt[];
+    }, []);
   },
 
   findById: (id: number): Prompt | undefined => {
-    const stmt = db.prepare('SELECT * FROM prompts WHERE id = ?');
-    return stmt.get(id) as Prompt | undefined;
+    return safeDbOperation((database) => {
+      const stmt = database.prepare('SELECT * FROM prompts WHERE id = ?');
+      return stmt.get(id) as Prompt | undefined;
+    }, undefined);
   },
 
   findByCreator: (creatorId: string): Prompt[] => {
-    const stmt = db.prepare('SELECT * FROM prompts WHERE creator_id = ? ORDER BY created_at DESC');
-    return stmt.all(creatorId) as Prompt[];
+    return safeDbOperation((database) => {
+      const stmt = database.prepare('SELECT * FROM prompts WHERE creator_id = ? ORDER BY created_at DESC');
+      return stmt.all(creatorId) as Prompt[];
+    }, []);
   },
 
   update: (id: number, updates: Partial<Omit<Prompt, 'id' | 'created_at' | 'updated_at'>>) => {
-    const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
-    const values = Object.values(updates);
-    
-    const stmt = db.prepare(`
-      UPDATE prompts 
-      SET ${fields}, updated_at = CURRENT_TIMESTAMP 
-      WHERE id = ?
-    `);
-    return stmt.run(...values, id);
+    return safeDbOperation((database) => {
+      const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
+      const values = Object.values(updates);
+      
+      const stmt = database.prepare(`
+        UPDATE prompts 
+        SET ${fields}, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `);
+      return stmt.run(...values, id);
+    }, null);
   },
 
   delete: (id: number) => {
-    const stmt = db.prepare('DELETE FROM prompts WHERE id = ?');
-    return stmt.run(id);
+    return safeDbOperation((database) => {
+      const stmt = database.prepare('DELETE FROM prompts WHERE id = ?');
+      return stmt.run(id);
+    }, null);
   },
 
   countByDepartment: (): Record<string, number> => {
-    const stmt = db.prepare(`
-      SELECT department, COUNT(*) as count 
-      FROM prompts 
-      WHERE status = 'approved' 
-      GROUP BY department
-    `);
-    const results = stmt.all() as { department: string; count: number }[];
-    return results.reduce((acc, { department, count }) => {
-      acc[department] = count;
-      return acc;
-    }, {} as Record<string, number>);
+    return safeDbOperation((database) => {
+      const stmt = database.prepare(`
+        SELECT department, COUNT(*) as count 
+        FROM prompts 
+        WHERE status = 'approved' 
+        GROUP BY department
+      `);
+      const results = stmt.all() as { department: string; count: number }[];
+      return results.reduce((acc, { department, count }) => {
+        acc[department] = count;
+        return acc;
+      }, {} as Record<string, number>);
+    }, {});
   }
 };
 
 // Saved prompt operations
 export const savedPromptOperations = {
   save: (userId: string, promptId: number) => {
-    const stmt = db.prepare(`
-      INSERT INTO saved_prompts (user_id, prompt_id)
-      VALUES (?, ?)
-    `);
-    return stmt.run(userId, promptId);
+    return safeDbOperation((database) => {
+      const stmt = database.prepare(`
+        INSERT INTO saved_prompts (user_id, prompt_id)
+        VALUES (?, ?)
+      `);
+      return stmt.run(userId, promptId);
+    }, null);
   },
 
   unsave: (userId: string, promptId: number) => {
-    const stmt = db.prepare(`
-      DELETE FROM saved_prompts 
-      WHERE user_id = ? AND prompt_id = ?
-    `);
-    return stmt.run(userId, promptId);
+    return safeDbOperation((database) => {
+      const stmt = database.prepare(`
+        DELETE FROM saved_prompts 
+        WHERE user_id = ? AND prompt_id = ?
+      `);
+      return stmt.run(userId, promptId);
+    }, null);
   },
 
   findByUser: (userId: string): (Prompt & { saved_at: string })[] => {
-    const stmt = db.prepare(`
-      SELECT p.*, sp.created_at as saved_at
-      FROM prompts p
-      JOIN saved_prompts sp ON p.id = sp.prompt_id
-      WHERE sp.user_id = ?
-      ORDER BY sp.created_at DESC
-    `);
-    return stmt.all(userId) as (Prompt & { saved_at: string })[];
+    return safeDbOperation((database) => {
+      const stmt = database.prepare(`
+        SELECT p.*, sp.created_at as saved_at
+        FROM prompts p
+        JOIN saved_prompts sp ON p.id = sp.prompt_id
+        WHERE sp.user_id = ?
+        ORDER BY sp.created_at DESC
+      `);
+      return stmt.all(userId) as (Prompt & { saved_at: string })[];
+    }, []);
   },
 
   isSaved: (userId: string, promptId: number): boolean => {
-    const stmt = db.prepare(`
-      SELECT 1 FROM saved_prompts 
-      WHERE user_id = ? AND prompt_id = ?
-    `);
-    return !!stmt.get(userId, promptId);
+    return safeDbOperation((database) => {
+      const stmt = database.prepare(`
+        SELECT 1 FROM saved_prompts 
+        WHERE user_id = ? AND prompt_id = ?
+      `);
+      return !!stmt.get(userId, promptId);
+    }, false);
   }
 };
 
-export default db; 
+export default getDatabase; 
