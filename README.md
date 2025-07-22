@@ -48,7 +48,7 @@ A modern, full-stack web application for organizing and sharing AI prompts withi
 - **Frontend**: Next.js 15, React 19, TypeScript
 - **Styling**: Tailwind CSS, shadcn/ui components
 - **Authentication**: NextAuth.js with Google OAuth
-- **Database**: SQLite with better-sqlite3
+- **Database**: PostgreSQL with pg driver
 - **API**: Next.js App Router API routes
 - **Icons**: Lucide React
 
@@ -116,7 +116,7 @@ See `GOOGLE_AUTH_SETUP.md` for detailed instructions.
 
 ## 📊 Database Schema
 
-The application uses SQLite with three main tables:
+The application uses PostgreSQL with three main tables:
 
 - **`users`** - User authentication and profile data
 - **`prompts`** - All submitted prompts with metadata
