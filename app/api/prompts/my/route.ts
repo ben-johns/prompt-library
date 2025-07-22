@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const prompts = promptOperations.findByCreator(session.user.id);
+    const prompts = await promptOperations.findByCreator(session.user.id);
     return NextResponse.json(prompts);
   } catch (error) {
     console.error('Error fetching user prompts:', error);

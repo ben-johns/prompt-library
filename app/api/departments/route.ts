@@ -4,7 +4,7 @@ import { promptOperations } from '@/lib/database';
 // GET /api/departments - Get department information with prompt counts
 export async function GET(request: NextRequest) {
   try {
-    const counts = promptOperations.countByDepartment();
+    const counts = await promptOperations.countByDepartment();
     
     // Default departments with their information
     const departments = [

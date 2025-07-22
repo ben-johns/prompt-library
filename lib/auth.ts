@@ -31,7 +31,7 @@ const authOptions: AuthOptions = {
           try {
             // Use email as the stable ID for consistency
             const userId = user.email;
-            userOperations.upsert({
+            await userOperations.upsert({
               id: userId,
               email: user.email,
               name: user.name,
@@ -48,7 +48,7 @@ const authOptions: AuthOptions = {
     async session({ session, token }) {
       // Add user ID to session
       if (session.user?.email) {
-        const dbUser = userOperations.findByEmail(session.user.email);
+        const dbUser = await userOperations.findByEmail(session.user.email);
         if (dbUser) {
           session.user.id = dbUser.id;
         }

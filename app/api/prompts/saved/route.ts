@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const savedPrompts = savedPromptOperations.findByUser(session.user.id);
+    const savedPrompts = await savedPromptOperations.findByUser(session.user.id);
     return NextResponse.json(savedPrompts);
   } catch (error) {
     console.error('Error fetching saved prompts:', error);

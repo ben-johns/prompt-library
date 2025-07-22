@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       filters.category = category;
     }
 
-    const prompts = promptOperations.findAll(filters);
+    const prompts = await promptOperations.findAll(filters);
     return NextResponse.json(prompts);
   } catch (error) {
     console.error('Error fetching prompts:', error);
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = promptOperations.create({
+    const result = await promptOperations.create({
       title,
       description,
       department,
@@ -63,8 +63,15 @@ export async function POST(request: NextRequest) {
       status: 'pending' // New prompts start as pending
     });
 
+    if (!result) {
+      return NextResponse.json(
+        { error: 'Failed to create prompt' },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
-      { message: 'Prompt created successfully', id: result.lastInsertRowid },
+      { message: 'Prompt created successfully', id: result.id, prompt: result },
       { status: 201 }
     );
   } catch (error) {

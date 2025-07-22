@@ -27,7 +27,7 @@ export async function POST(
     }
 
     // Check if prompt exists
-    const prompt = promptOperations.findById(promptId);
+    const prompt = await promptOperations.findById(promptId);
     if (!prompt) {
       return NextResponse.json(
         { error: 'Prompt not found' },
@@ -36,7 +36,7 @@ export async function POST(
     }
 
     // Check if already saved
-    const alreadySaved = savedPromptOperations.isSaved(session.user.id, promptId);
+    const alreadySaved = await savedPromptOperations.isSaved(session.user.id, promptId);
     if (alreadySaved) {
       return NextResponse.json(
         { error: 'Prompt already saved' },
@@ -44,7 +44,7 @@ export async function POST(
       );
     }
 
-    savedPromptOperations.save(session.user.id, promptId);
+    await savedPromptOperations.save(session.user.id, promptId);
     return NextResponse.json({ message: 'Prompt saved successfully' });
   } catch (error) {
     console.error('Error saving prompt:', error);
@@ -78,7 +78,7 @@ export async function DELETE(
       );
     }
 
-    savedPromptOperations.unsave(session.user.id, promptId);
+    await savedPromptOperations.unsave(session.user.id, promptId);
     return NextResponse.json({ message: 'Prompt unsaved successfully' });
   } catch (error) {
     console.error('Error unsaving prompt:', error);
