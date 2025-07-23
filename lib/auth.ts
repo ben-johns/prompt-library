@@ -21,34 +21,28 @@ const authOptions: AuthOptions = {
     async signIn({ user, account }) {
       // Only allow users from Braze Google Workspace domain
       if (account?.provider === "google") {
-        console.log("Sign-in attempt:", user.email, user.name);
-        
-        // TODO: Update domain restriction or remove for testing
+        // Domain restriction removed for open access
+        // To re-enable for production, uncomment and update domain:
         // const domain = "braze.com";
         // if (user?.email && !user.email.endsWith(`@${domain}`)) {
-        //   console.log("Domain rejected:", user.email);
-        //   return false; // Reject sign-in if not from braze.com domain
+        //   return false; // Reject sign-in if not from allowed domain
         // }
 
         // Create or update user in database
         if (user.email && user.name) {
           try {
-            console.log("Creating user:", user.email, user.name);
             // Use email as the stable ID for consistency
             const userId = user.email;
-            const result = await userOperations.upsert({
+            await userOperations.upsert({
               id: userId,
               email: user.email,
               name: user.name,
               image: user.image || undefined,
             });
-            console.log("User created successfully:", result);
           } catch (error) {
             console.error("Error creating/updating user:", error);
             return false;
           }
-        } else {
-          console.log("Missing email or name:", { email: user.email, name: user.name });
         }
       }
       return true;
